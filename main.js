@@ -1,28 +1,30 @@
-
 // #ifndef VUE3
-import Vue from 'vue'
-import App from './App'
+import Vue from "vue";
 
-import '@/utils/wafp.js'
-import '@/utils/source.js'
+import App from "./App";
+import store from "@/store";
 
-Vue.config.productionTip = false
+import "@/utils/wafp.js";
+import "@/utils/source.js";
 
-App.mpType = 'app'
+Vue.config.productionTip = false;
+
+App.mpType = "app";
 
 const app = new Vue({
-    ...App
-})
-app.$mount()
+  store,
+  ...App,
+});
+app.$mount();
 // #endif
 
 // #ifdef VUE3
-import { createSSRApp } from 'vue'
-import App from './App.vue'
+import { createSSRApp } from "vue";
+import App from "./App.vue";
 export function createApp() {
-  const app = createSSRApp(App)
+  const app = createSSRApp(App);
   return {
-    app
-  }
+    app,
+  };
 }
 // #endif

@@ -126,75 +126,89 @@
             ></uni-data-checkbox>
           </view>
         </view>
+        <view class="setting-item">
+          <text class="setting-item-title">乐器</text>
+          <view class="setting-item-value">
+            <uni-data-checkbox
+              v-model="instrument"
+              :localdata="instruments"
+            ></uni-data-checkbox>
+          </view>
+        </view>
       </view>
     </uni-popup>
   </view>
 </template>
 
 <script>
-import {
+import db, {
   processParagPitchWithIndex,
   flatten,
   getBarIndexInParagByPitchIndex,
-} from "../../utils";
+} from "@/utils";
 import { NOTE_MAP, PITCH_ARR, TONE } from "../../utils/constants";
 
 let queue = [];
 const player = new global.WebAudioFontPlayer();
 const ticker = new global.WebAudioFontTicker();
-const instr = global._tone_0220_Aspirin_sf2_file;
+let instr = global._tone_0220_Aspirin_sf2_file;
 
 export default {
   data() {
     return {
-      audioContext: wx.createWebAudioContext(),
-      bpm: 75,
+      audioContext: null,
+      bpm: 60,
       pieceLen: 0,
       currentPitch: "",
       pitchIndex: 0,
-      toneBase: 6,
+      toneBase: 0,
       toneDiff: 0,
-      tone: 6,
+      tone: 0,
       mode: 0,
       currentParagIndex: 0,
       activeParagIndex: -1,
       backScrollTimer: null,
       isPlaying: false,
-      isAfterToggleMode: false,
+      isAfterToggleMode: true,
       replaceNoteValue: [],
       replaceNotes: [
         { value: 0, text: "用#3代替4" },
         { value: 1, text: "用#7代替1" },
       ],
-      songNotes: [
-        [
-          "2(3/16)1(1/16)2(3/16)1(1/16)2(1/8)3(1/8)5(1/8)3(1/8)",
-          "2(3/16)1(1/16)2(3/16)1(1/16)2(1/16)3(1/16)2(1/16)1(1/16)(5)(1/4)",
-          "2(3/16)1(1/16)2(3/16)1(1/16)2(1/8)3(1/8)5(1/8)3(1/8)",
-          "2(3/16)3(1/16)2(1/8)1(1/16)2(1/16)2(1/4)0(1/4)",
-          "2(3/16)1(1/16)2(3/16)1(1/16)2(1/8)3(1/8)5(1/8)3(1/8)",
-          "2(3/16)3(1/16)2(1/8)1(1/16)(6)(1/16)(6)(1/8)0(1/8)",
-          "3(1/16)2(1/16)1(1/16)2(1/16)1(1/8)0(1/8)",
-          "3(1/16)2(1/16)1(1/16)2(1/16)1(3/16)",
-          "(5)(1/16)3(1/16)2(1/16)1(1/16)2(1/16)1(1/4)0(1/4)",
-        ],
-        [
-          "0(1/8)1(1/8)2(1/8)3(1/8)1(1/8)",
-          "6(1/8)5(1/16)6(3/16)0(1/16)1(1/16)7(1/8)6(1/16)7(3/16)",
-          "0(1/8)7(1/8)6(1/16)7(3/16)3(1/8)[1](1/16)[2](1/16)[1](1/16)7(1/16)6(1/8)",
-          "5(1/8)6(1/8)[3](1/16)[3](3/16)5(1/8)6(1/8)[3](1/16)[3](3/16)5(1/16)6(1/16)6(13/16)",
-        ],
-        [
-          "[1](1/8)[2](1/8)[3](1/8)[6](1/16)[5](3/16)[6](1/16)[5](3/16)[6](1/16)[5](3/16)[2](1/16)",
-          "[3](3/16)[6](1/16)[5](3/16)[6](1/16)[5](3/16)[6](1/16)[5](3/16)[2](1/16)[3](1/16)",
-          "[2](1/8)[1](1/16)6(3/16)[1](1/16)[1](1/16)[2](1/8)[1](1/16)6(3/16)[1](3/16)[3](5/16)[4](1/16)[3](1/16)[2](1/16)[3](1/16)[2](3/16)",
-          "[1](1/8)[2](1/8)[3](1/8)[6](1/16)[5](3/16)[6](1/16)[5](3/16)[6](1/16)[5](3/16)[2](1/16)",
-          "[3](3/16)[6](1/16)[5](3/16)[6](1/16)[5](3/16)[6](1/16)[5](3/16)[3](3/16)",
-          "[2](1/8)[1](1/16)6(1/8)[3](3/16)[2](1/8)[1](1/16)6(1/8)[1](3/16)[1](3/4)",
-          "6(1/16)[3](3/16)[2](1/8)[1](1/16)6(1/8)[3](3/16)[2](1/8)[1](1/16)6(1/8)[1](3/16)[1](16/16)",
-        ],
+      instrument: "_tone_0220_Aspirin_sf2_file",
+      instruments: [
+        { value: "_tone_0220_Aspirin_sf2_file", text: "口琴" },
+        { value: "_tone_0720_GeneralUserGS_sf2_file", text: "短笛" },
       ],
+
+      songNotes: [],
     };
+  },
+  async mounted() {
+    const { id } = this.$root.$mp.query;
+    try {
+      const {
+        data: { bpm, tone, songNotes },
+      } = await db.collection("practice-song").doc(id).get();
+
+      this.bpm = bpm;
+      this.tone = tone;
+      this.toneBase = tone;
+      this.songNotes = songNotes;
+    } catch (e) {
+      console.log(e);
+    }
+    this.audioContext = wx.createWebAudioContext();
+    this.gainMaster = this.audioContext.createGain();
+    this.gainMaster.connect(this.audioContext.destination);
+    this.gainMaster.gain.value = 0.7;
+
+    player.adjustPreset(this.audioContext, instr);
+    this.processNumberNote(this.numberNote);
+  },
+  destroyed() {
+    this.pause();
+    instr = global._tone_0220_Aspirin_sf2_file;
   },
   computed: {
     N() {
@@ -297,15 +311,7 @@ export default {
       }
     },
   },
-  onLoad() {
-    this.gainMaster = this.audioContext.createGain();
-    this.gainMaster.connect(this.audioContext.destination);
-    this.gainMaster.gain.value = 0.7;
 
-    player.adjustPreset(this.audioContext, instr);
-
-    this.processNumberNote(this.numberNote);
-  },
   watch: {
     bpm() {
       this.pause();
@@ -325,9 +331,25 @@ export default {
       this.pitchIndex = 0;
       this.processNumberNote(this.numberNote);
     },
+    instrument(newValue) {
+      instr = global[newValue];
+      if (this.isPlaying) {
+        this.pause();
+        this.processNumberNote(this.numberNote);
+        setTimeout(() => {
+          this.resume();
+        }, 100);
+      } else {
+        this.processNumberNote(this.numberNote);
+      }
+    },
   },
   methods: {
-    back() {},
+    back() {
+      wx.navigateBack({
+        delta: 1,
+      });
+    },
     master(pitch, duration) {
       if (pitch === 0) return null;
       return {
